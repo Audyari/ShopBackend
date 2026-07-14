@@ -31,3 +31,18 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# ===== APPLICATION PROPERTIES (RAHASIA!) =====
+src/main/resources/application.properties
+src/main/resources/application-dev.properties
+src/main/resources/application-prod.properties
+
+# ===== FILE LAINNYA =====
+*.log
+*.class
+target/
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db

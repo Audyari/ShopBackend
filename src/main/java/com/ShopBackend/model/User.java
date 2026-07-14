@@ -12,6 +12,9 @@ public class User {
     private String password;
     private String name;
 
+    @Column(name = "is_verified")
+    private Boolean isVerified = false;  // ⭐ TAMBAHKAN INI!
+
     public User() {}
 
     // GETTER & SETTER
@@ -26,4 +29,7 @@ public class User {
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
+
+    public Boolean getIsVerified() { return isVerified; }
+    public void setIsVerified(Boolean isVerified) { this.isVerified = isVerified; }
 }

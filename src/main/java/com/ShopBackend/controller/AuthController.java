@@ -13,7 +13,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
-    
     private final AuthService authService;
 
     public AuthController(AuthService authService) {
@@ -23,8 +22,47 @@ public class AuthController {
     // ===== REGISTER =====
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
-        User user = authService.register(request);
-        return ResponseEntity.ok("User " + user.getEmail() + " berhasil daftar!");
+        try {
+            User user = authService.register(request);
+            return ResponseEntity.ok("User " + user.getEmail() + " berhasil daftar! Cek email Anda untuk kode OTP.");
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // ===== ⭐ VERIFY OTP =====
+    @PostMapping("/verify-otp")
+    public ResponseEntity<?> verifyOTP(@RequestBody Map<String, String> request) {
+        try {
+            String email = request.get("email");
+            String otp = request.get("otp");
+            
+            if (email == null || otp == null) {
+                return ResponseEntity.badRequest().body("Email dan OTP wajib diisi!");
+            }
+            
+            String result = authService.verifyOTP(email, otp);
+            return ResponseEntity.ok(result);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // ===== ⭐ RESEND OTP =====
+    @PostMapping("/resend-otp")
+    public ResponseEntity<?> resendOTP(@RequestBody Map<String, String> request) {
+        try {
+            String email = request.get("email");
+            
+            if (email == null) {
+                return ResponseEntity.badRequest().body("Email wajib diisi!");
+            }
+            
+            String result = authService.resendOTP(email);
+            return ResponseEntity.ok(result);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 
     // ===== LOGIN =====
@@ -32,22 +70,6 @@ public class AuthController {
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         try {
             AuthResponse response = authService.login(request);
-            return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
-
-    // ===== ⭐ REFRESH TOKEN =====
-    @PostMapping("/refresh")
-    public ResponseEntity<?> refresh(@RequestHeader("Authorization") String authorizationHeader) {
-        try {
-            if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
-                return ResponseEntity.badRequest().body("Invalid Authorization header!");
-            }
-
-            String refreshToken = authorizationHeader.substring(7);
-            Map<String, String> response = authService.refreshToken(refreshToken);
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
@@ -65,11 +87,25 @@ public class AuthController {
             }
 
             String accessToken = accessTokenHeader.substring(7);
-            String refreshToken = refreshTokenHeader;
-
-            authService.logout(accessToken, refreshToken);
+            authService.logout(accessToken, refreshTokenHeader);
 
             return ResponseEntity.ok("Logout berhasil!");
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // ===== REFRESH TOKEN =====
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refresh(@RequestHeader("Authorization") String authorizationHeader) {
+        try {
+            if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+                return ResponseEntity.badRequest().body("Invalid Authorization header!");
+            }
+
+            String refreshToken = authorizationHeader.substring(7);
+            Map<String, String> response = authService.refreshToken(refreshToken);
+            return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }

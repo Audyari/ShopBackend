@@ -8,6 +8,7 @@ import com.ShopBackend.repository.UserRepository;
 import com.ShopBackend.util.JwtUtil;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -19,18 +20,25 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final TokenBlacklistService tokenBlacklistService;
-    
+    private final OTPService otpService;
+    private final EmailService emailService;
+
     public AuthService(UserRepository userRepository, 
                        PasswordEncoder passwordEncoder, 
                        JwtUtil jwtUtil,
-                       TokenBlacklistService tokenBlacklistService) {
+                       TokenBlacklistService tokenBlacklistService,
+                       OTPService otpService,
+                       EmailService emailService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.tokenBlacklistService = tokenBlacklistService;
+        this.otpService = otpService;
+        this.emailService = emailService;
     }
-    
-    // ===== REGISTER =====
+
+    // ===== REGISTER (dengan OTP) =====
+    @Transactional
     public User register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new RuntimeException("Email sudah terdaftar!");
@@ -40,28 +48,87 @@ public class AuthService {
         user.setEmail(request.getEmail());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setName(request.getName());
+        user.setIsVerified(false); // ⭐ BELUM VERIFIED!
 
-        return userRepository.save(user);
+        // Simpan user ke database
+        User savedUser = userRepository.save(user);
+
+        // Generate OTP dan kirim email
+        String otp = otpService.generateOTP(request.getEmail());
+        emailService.sendOTPEmail(request.getEmail(), otp);
+
+        return savedUser;
     }
 
-    // ===== LOGIN (Generate 2 Token) =====
-    public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByEmail(request.getEmail())
+    // ===== VERIFY OTP =====
+    @Transactional
+    public String verifyOTP(String email, String otp) {
+        // Cek apakah user ada
+        User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Email tidak ditemukan!"));
+
+        // Cek apakah user sudah verified
+        if (user.getIsVerified()) {
+            throw new RuntimeException("Email sudah diverifikasi sebelumnya!");
+        }
+
+        // Validasi OTP
+        if (!otpService.validateOTP(email, otp)) {
+            throw new RuntimeException("OTP tidak valid atau sudah expired!");
+        }
+
+        // Update user menjadi verified
+        user.setIsVerified(true);
+        userRepository.save(user);
+
+        return "Email berhasil diverifikasi!";
+    }
+
+    // ===== RESEND OTP =====
+    public String resendOTP(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Email tidak ditemukan!"));
+
+        if (user.getIsVerified()) {
+            throw new RuntimeException("Email sudah diverifikasi!");
+        }
+
+        // Resend OTP
+        otpService.resendOTP(email);
+        String newOtp = otpService.generateOTP(email);
+        emailService.sendOTPEmail(email, newOtp);
+
+        return "OTP baru telah dikirim ke email Anda!";
+    }
+
+    // ===== LOGIN (Cek Verified) =====
+    public AuthResponse login(LoginRequest request) {
+        // Cari user yang sudah verified
+        User user = userRepository.findByEmailAndIsVerifiedTrue(request.getEmail())
+                .orElseThrow(() -> new RuntimeException("Email tidak ditemukan atau belum diverifikasi!"));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw new RuntimeException("Password salah!");
         }
 
-        // Generate 2 token
         String accessToken = jwtUtil.generateAccessToken(user.getId(), user.getEmail(), "USER");
         String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getEmail());
 
-        // Simpan refresh token ke Redis
         tokenBlacklistService.saveRefreshToken(refreshToken);
 
         return new AuthResponse(accessToken, refreshToken, user.getEmail(), user.getName());
     }
+
+    // ===== LOGOUT =====
+    public void logout(String accessToken, String refreshToken) {
+        tokenBlacklistService.blacklistAccessToken(accessToken);
+        if (refreshToken != null && !refreshToken.isEmpty()) {
+            String email = jwtUtil.extractEmail(refreshToken);
+            tokenBlacklistService.revokeRefreshToken(email);
+            tokenBlacklistService.blacklistRefreshToken(refreshToken);
+        }
+    }
+
 
     // ===== REFRESH TOKEN =====
     public Map<String, String> refreshToken(String refreshToken) {
@@ -74,7 +141,7 @@ public class AuthService {
         if (tokenBlacklistService.isRefreshTokenBlacklisted(refreshToken)) {
             throw new RuntimeException("Refresh token sudah dicabut!");
         }
-
+    
         // 3. Extract data dari refresh token
         String email = jwtUtil.extractEmail(refreshToken);
         Long userId = jwtUtil.extractUserId(refreshToken);
@@ -90,18 +157,5 @@ public class AuthService {
         Map<String, String> response = new HashMap<>();
         response.put("accessToken", newAccessToken);
         return response;
-    }
-
-    // ===== LOGOUT (Revoke Refresh Token) =====
-    public void logout(String accessToken, String refreshToken) {
-        // Blacklist access token
-        tokenBlacklistService.blacklistAccessToken(accessToken);
-
-        // Revoke refresh token
-        if (refreshToken != null && !refreshToken.isEmpty()) {
-            String email = jwtUtil.extractEmail(refreshToken);
-            tokenBlacklistService.revokeRefreshToken(email);
-            tokenBlacklistService.blacklistRefreshToken(refreshToken);
-        }
     }
 }
