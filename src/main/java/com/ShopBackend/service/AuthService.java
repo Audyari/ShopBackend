@@ -9,6 +9,9 @@ import com.ShopBackend.util.JwtUtil;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @Service
 public class AuthService {
     
@@ -16,7 +19,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final TokenBlacklistService tokenBlacklistService;
-
+    
     public AuthService(UserRepository userRepository, 
                        PasswordEncoder passwordEncoder, 
                        JwtUtil jwtUtil,
@@ -41,7 +44,7 @@ public class AuthService {
         return userRepository.save(user);
     }
 
-    // ===== LOGIN =====
+    // ===== LOGIN (Generate 2 Token) =====
     public AuthResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new RuntimeException("Email tidak ditemukan!"));
@@ -50,23 +53,55 @@ public class AuthService {
             throw new RuntimeException("Password salah!");
         }
 
-        String token = jwtUtil.generateToken(user.getId(), user.getEmail(), "USER");
+        // Generate 2 token
+        String accessToken = jwtUtil.generateAccessToken(user.getId(), user.getEmail(), "USER");
+        String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getEmail());
 
-        return new AuthResponse(token, user.getEmail(), user.getName());
+        // Simpan refresh token ke Redis
+        tokenBlacklistService.saveRefreshToken(refreshToken);
+
+        return new AuthResponse(accessToken, refreshToken, user.getEmail(), user.getName());
     }
 
-    // ===== ⭐ LOGOUT (TAMBAHKAN INI!) =====
-    public void logout(String token) {
-        if (token == null || token.isEmpty()) {
-            throw new RuntimeException("Token tidak ditemukan!");
+    // ===== REFRESH TOKEN =====
+    public Map<String, String> refreshToken(String refreshToken) {
+        // 1. Cek apakah refresh token valid
+        if (!jwtUtil.isTokenValid(refreshToken)) {
+            throw new RuntimeException("Refresh token tidak valid!");
         }
 
-        // Cek apakah token sudah di-blacklist
-        if (tokenBlacklistService.isTokenBlacklisted(token)) {
-            throw new RuntimeException("Token sudah logout sebelumnya!");
+        // 2. Cek apakah refresh token di-blacklist
+        if (tokenBlacklistService.isRefreshTokenBlacklisted(refreshToken)) {
+            throw new RuntimeException("Refresh token sudah dicabut!");
         }
 
-        // Blacklist token
-        tokenBlacklistService.blacklistToken(token);
+        // 3. Extract data dari refresh token
+        String email = jwtUtil.extractEmail(refreshToken);
+        Long userId = jwtUtil.extractUserId(refreshToken);
+
+        // 4. Validasi refresh token di Redis
+        if (!tokenBlacklistService.validateRefreshToken(email, refreshToken)) {
+            throw new RuntimeException("Refresh token tidak valid!");
+        }
+
+        // 5. Generate access token baru
+        String newAccessToken = jwtUtil.generateAccessToken(userId, email, "USER");
+
+        Map<String, String> response = new HashMap<>();
+        response.put("accessToken", newAccessToken);
+        return response;
+    }
+
+    // ===== LOGOUT (Revoke Refresh Token) =====
+    public void logout(String accessToken, String refreshToken) {
+        // Blacklist access token
+        tokenBlacklistService.blacklistAccessToken(accessToken);
+
+        // Revoke refresh token
+        if (refreshToken != null && !refreshToken.isEmpty()) {
+            String email = jwtUtil.extractEmail(refreshToken);
+            tokenBlacklistService.revokeRefreshToken(email);
+            tokenBlacklistService.blacklistRefreshToken(refreshToken);
+        }
     }
 }

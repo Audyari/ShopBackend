@@ -8,9 +8,12 @@ import com.ShopBackend.service.AuthService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+    
     private final AuthService authService;
 
     public AuthController(AuthService authService) {
@@ -35,21 +38,40 @@ public class AuthController {
         }
     }
 
-     // ===== ⭐ LOGOUT (TAMBAHKAN INI!) =====
-    @PostMapping("/logout")
-    public ResponseEntity<?> logout(@RequestHeader("Authorization") String authorizationHeader) {
+    // ===== ⭐ REFRESH TOKEN =====
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refresh(@RequestHeader("Authorization") String authorizationHeader) {
         try {
             if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
                 return ResponseEntity.badRequest().body("Invalid Authorization header!");
             }
 
-            String token = authorizationHeader.substring(7);
-            authService.logout(token);
+            String refreshToken = authorizationHeader.substring(7);
+            Map<String, String> response = authService.refreshToken(refreshToken);
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // ===== LOGOUT =====
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(
+            @RequestHeader(value = "Authorization", required = false) String accessTokenHeader,
+            @RequestHeader(value = "X-Refresh-Token", required = false) String refreshTokenHeader) {
+        try {
+            if (accessTokenHeader == null || !accessTokenHeader.startsWith("Bearer ")) {
+                return ResponseEntity.badRequest().body("Invalid Authorization header!");
+            }
+
+            String accessToken = accessTokenHeader.substring(7);
+            String refreshToken = refreshTokenHeader;
+
+            authService.logout(accessToken, refreshToken);
 
             return ResponseEntity.ok("Logout berhasil!");
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
-
 }

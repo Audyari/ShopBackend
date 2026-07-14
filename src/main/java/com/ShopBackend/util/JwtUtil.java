@@ -10,27 +10,41 @@ import java.util.Date;
 
 @Component
 public class JwtUtil {
-    // Secret key harus minimal 256 bit (32 karakter)
-    private static final String SECRET_KEY = "mySuperSecretKeyForJWTGeneration1234567890123456";
-    private static final long EXPIRATION_TIME = 86400000; // 24 jam dalam milidetik
 
+    private static final String SECRET_KEY = "mySuperSecretKeyForJWTGeneration1234567890123456";
+    private static final long ACCESS_TOKEN_EXPIRATION = 900000; // 15 menit
+    private static final long REFRESH_TOKEN_EXPIRATION = 604800000; // 7 hari
+    
     private SecretKey getSecretKey() {
         return Keys.hmacShaKeyFor(SECRET_KEY.getBytes());
     }
 
-    // 1. Generate JWT Token
-    public String generateToken(Long userId, String email, String role) {
+    // ===== GENERATE ACCESS TOKEN =====
+    public String generateAccessToken(Long userId, String email, String role) {
         return Jwts.builder()
                 .claim("userId", userId)
                 .claim("email", email)
                 .claim("role", role)
+                .claim("type", "access")
                 .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
+                .expiration(new Date(System.currentTimeMillis() + ACCESS_TOKEN_EXPIRATION))
                 .signWith(getSecretKey())
                 .compact();
     }
 
-    // 2. Extract semua claims dari token
+    // ===== GENERATE REFRESH TOKEN =====
+    public String generateRefreshToken(Long userId, String email) {
+        return Jwts.builder()
+                .claim("userId", userId)
+                .claim("email", email)
+                .claim("type", "refresh")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + REFRESH_TOKEN_EXPIRATION))
+                .signWith(getSecretKey())
+                .compact();
+    }
+
+    // ===== EXTRACT CLAIMS =====
     public Claims extractClaims(String token) {
         return Jwts.parser()
                 .verifyWith(getSecretKey())
@@ -39,17 +53,22 @@ public class JwtUtil {
                 .getPayload();
     }
 
-    // 3. Extract email dari token
+    // ===== EXTRACT EMAIL =====
     public String extractEmail(String token) {
         return extractClaims(token).get("email", String.class);
     }
 
-    // 4. Extract userId dari token
+    // ===== EXTRACT USER ID =====
     public Long extractUserId(String token) {
         return extractClaims(token).get("userId", Long.class);
     }
 
-    // 5. Validasi token
+    // ===== EXTRACT TOKEN TYPE =====
+    public String extractTokenType(String token) {
+        return extractClaims(token).get("type", String.class);
+    }
+
+    // ===== VALIDATE TOKEN =====
     public boolean isTokenValid(String token) {
         try {
             extractClaims(token);

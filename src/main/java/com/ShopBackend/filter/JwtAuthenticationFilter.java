@@ -32,28 +32,38 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
-        String authHeader = request.getHeader("Authorization");
-
-        // Skip untuk endpoint logout dan auth
         String path = request.getRequestURI();
-        if (path.equals("/api/auth/logout")) {
+
+        // Skip untuk endpoint auth (login, register, refresh)
+        if (path.equals("/api/auth/login") || 
+            path.equals("/api/auth/register") || 
+            path.equals("/api/auth/refresh")) {
             filterChain.doFilter(request, response);
             return;
         }
 
+        String authHeader = request.getHeader("Authorization");
+
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
 
-            // CEK APAKAH TOKEN DI BLACKLIST
-            if (tokenBlacklistService.isTokenBlacklisted(token)) {
+            // Cek apakah token di blacklist (access token)
+            if (tokenBlacklistService.isAccessTokenBlacklisted(token)) {
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.getWriter().write("Token sudah logout!");
                 return;
             }
 
+            // Validasi token (harus access token, bukan refresh token)
             if (jwtUtil.isTokenValid(token)) {
+                String tokenType = jwtUtil.extractTokenType(token);
+                if (!"access".equals(tokenType)) {
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.getWriter().write("Invalid token type!");
+                    return;
+                }
+
                 String email = jwtUtil.extractEmail(token);
-                // HAPUS baris ini: Long userId = jwtUtil.extractUserId(token);
 
                 UsernamePasswordAuthenticationToken auth =
                         new UsernamePasswordAuthenticationToken(email, null, new ArrayList<>());
