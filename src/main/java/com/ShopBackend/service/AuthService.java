@@ -15,13 +15,18 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final TokenBlacklistService tokenBlacklistService;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil) {
+    public AuthService(UserRepository userRepository, 
+                       PasswordEncoder passwordEncoder, 
+                       JwtUtil jwtUtil,
+                       TokenBlacklistService tokenBlacklistService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
+        this.tokenBlacklistService = tokenBlacklistService;
     }
-
+    
     // ===== REGISTER =====
     public User register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
@@ -38,19 +43,30 @@ public class AuthService {
 
     // ===== LOGIN =====
     public AuthResponse login(LoginRequest request) {
-        // 1. Cari user di database
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new RuntimeException("Email tidak ditemukan!"));
 
-        // 2. Verifikasi password
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw new RuntimeException("Password salah!");
         }
 
-        // 3. Generate JWT token
         String token = jwtUtil.generateToken(user.getId(), user.getEmail(), "USER");
 
-        // 4. Return response
         return new AuthResponse(token, user.getEmail(), user.getName());
+    }
+
+    // ===== ⭐ LOGOUT (TAMBAHKAN INI!) =====
+    public void logout(String token) {
+        if (token == null || token.isEmpty()) {
+            throw new RuntimeException("Token tidak ditemukan!");
+        }
+
+        // Cek apakah token sudah di-blacklist
+        if (tokenBlacklistService.isTokenBlacklisted(token)) {
+            throw new RuntimeException("Token sudah logout sebelumnya!");
+        }
+
+        // Blacklist token
+        tokenBlacklistService.blacklistToken(token);
     }
 }

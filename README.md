@@ -26,12 +26,17 @@
     "USE shop_db;
     SELECT * FROM users;"
 		
-7. cek login	
+🔑 STEP 1: LOGIN DULU (DAPAT TOKEN)
 
-    curl -X POST http://localhost:8080/api/auth/verify-password -H "Content-Type: application/json" -d "{\"email\":\"user@mail.com\",\"password\":\"123456\"}"
-		
-	
-8. daftar
+	curl -X POST http://localhost:8080/api/auth/login -H "Content-Type: application/json" -d "{\"email\":\"user@mail.com\",\"password\":\"12345678\"}"
 
-    curl -X POST http://localhost:8080/api/auth/register -H "Content-Type: application/json" -d "{\"email\":\"user@mail.com\",\"password\":\"123456\",\"name\":\"Budi\"}"
+2️⃣ Logout
+
+	curl -X POST http://localhost:8080/api/auth/logout -H "Authorization: Bearer <TOKEN_KAMU>"
+
+
+
+7. install redis
+docker run -d --name redis-container -p 6379:6379 redis:latestdocker run -d --name redis-container -p 6379:6379 redis:latest
+
 

@@ -1,5 +1,6 @@
 package com.ShopBackend.filter;
 
+import com.ShopBackend.service.TokenBlacklistService;
 import com.ShopBackend.util.JwtUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -18,9 +19,11 @@ import java.util.ArrayList;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
+    private final TokenBlacklistService tokenBlacklistService;
 
-    public JwtAuthenticationFilter(JwtUtil jwtUtil) {
+    public JwtAuthenticationFilter(JwtUtil jwtUtil, TokenBlacklistService tokenBlacklistService) {
         this.jwtUtil = jwtUtil;
+        this.tokenBlacklistService = tokenBlacklistService;
     }
 
     @Override
@@ -31,14 +34,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String authHeader = request.getHeader("Authorization");
 
+        // Skip untuk endpoint logout dan auth
+        String path = request.getRequestURI();
+        if (path.equals("/api/auth/logout")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
 
+            // CEK APAKAH TOKEN DI BLACKLIST
+            if (tokenBlacklistService.isTokenBlacklisted(token)) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.getWriter().write("Token sudah logout!");
+                return;
+            }
+
             if (jwtUtil.isTokenValid(token)) {
                 String email = jwtUtil.extractEmail(token);
-                Long userId = jwtUtil.extractUserId(token);
+                // HAPUS baris ini: Long userId = jwtUtil.extractUserId(token);
 
-                // Set authentication ke SecurityContext
                 UsernamePasswordAuthenticationToken auth =
                         new UsernamePasswordAuthenticationToken(email, null, new ArrayList<>());
                 auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));

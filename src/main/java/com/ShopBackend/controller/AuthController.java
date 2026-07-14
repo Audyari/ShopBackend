@@ -34,4 +34,22 @@ public class AuthController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
+
+     // ===== ⭐ LOGOUT (TAMBAHKAN INI!) =====
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@RequestHeader("Authorization") String authorizationHeader) {
+        try {
+            if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+                return ResponseEntity.badRequest().body("Invalid Authorization header!");
+            }
+
+            String token = authorizationHeader.substring(7);
+            authService.logout(token);
+
+            return ResponseEntity.ok("Logout berhasil!");
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
 }

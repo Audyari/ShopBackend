@@ -32,9 +32,22 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/**").permitAll()   // Login & Register bebas
+                // 1. Endpoint public
+                .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/test").permitAll()
-                .anyRequest().authenticated()                  // Sisanya harus pake token
+                
+                // 2. ⭐ SWAGGER ENDPOINTS ⭐
+                .requestMatchers(
+                    "/swagger-ui/**",
+                    "/swagger-ui.html",
+                    "/v3/api-docs/**",
+                    "/v3/api-docs",
+                    "/swagger-resources/**",
+                    "/webjars/**"
+                ).permitAll()
+                
+                // 3. Sisanya harus pake token
+                .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
